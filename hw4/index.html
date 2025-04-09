@@ -28,19 +28,18 @@
 	<body>
 		<div class="container">
 		<h1>CS184/284A Spring 2025 Homework 4 Write-Up</h1>
-		<div style="text-align: center;">Names: </div>
+		<div style="text-align: center;">Names: Curtis Hu, Ashvin Verma</div>
 
 		<br>
 
-		Link to webpage: (TODO) <a href="https://cs184.eecs.berkeley.edu/sp25">cs184.eecs.berkeley.edu/sp25</a>
+		Link to webpage: <a href="https://cal-cs184-student.github.io/hw-webpages-quaternion/hw4/index.html">https://cal-cs184-student.github.io/hw-webpages-quaternion/hw4/index.html</a>
 
 		<br>
 
-		Link to GitHub repository: (TODO) <a href="https://cs184.eecs.berkeley.edu/sp25">cs184.eecs.berkeley.edu/sp25</a>
+		Link to GitHub repository: <a href="https://github.com/cal-cs184-student/sp25-hw4-armory">https://github.com/cal-cs184-student/sp25-hw4-armory</a>
 
 		<figure>
 			<img src="clothsim.png" alt="Cloth draped over sphere" style="width:70%"/>
-			<figcaption>You can add images with captions!</figcaption>
 		</figure>
 
 		<!--
@@ -48,62 +47,446 @@
 		-->
 
 		<h2>Overview</h2>
-		Give a high-level overview of what you implemented in this homework. Think about what you've built as a whole. Share your thoughts on what interesting things you've learned from completing the homework.
+		In this article, how we setup the physics of a cloth simulation.
+		We'll go over how we create all the mass-spring systems.
+		We'll go over how we calculate the forces on the fabric and how we'll adjust the positions in every timestep.
+		We'll go over how we handle collisions with simple geometric shapes.
+		We'll also discover how we handle collisions with itself to create a folding behavior.
+		Finally, we'll explore shaders and different shading techniques to create interesting patterns on our fabric!
 
 		<h2>Part 1: Masses and springs</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		To create a cloth simulation, we first make a generalization about the properties of a piece of cloth.
+		We assume the cloth is made of a lattice of springs and masses.
+		On a microscopic level, this does happen and we know that our model represents pseudo-physics rather than real physics, but we don't care.
+		This generalized model roughly simulates the properties of a piece of cloth, albeit not accurately.
 
-		<p>Here is an example 2x2 gridlike structure using an HTML table. Each <b>tr</b> is a row and each <b>td</b> is a column in that row. You might find this useful for framing and showing your result images in an organized fashion.</p>
+		<br><br>
+
+		We add so called "structural" constraints, which consists of only the springs interconnected the masses directly in a rectangular lattice.
+		As the name suggests, this intuitively is the fundamental structure of the cloth that holds the masses together.
+		We also add "shearing" constraints, which consists of the cross diagonals on all the rectangular tiles above.
+		Again, as the name suggests, this provides resistance against shearing -- so the cloth tends to return back to its original "square" shape.
+		Finally, we have "bending" constraints that interconnects masses two spaces away.
+		Of course, this provides some light resistance against bending of the fabric.
+
+		<br><br>
+
 		<div style="display: flex; flex-direction: column; align-items: center;">
 			<table style="width: 100%; text-align: center; border-collapse: collapse;">
 			  <tr>
 				<td style="text-align: center;">
-				  <img src="clothsim.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				  <img src="images/part1/4.png" width="400px"/>
+				  <figcaption>(a) Up close of default cloth</figcaption>
 				</td>
 				<td style="text-align: center;">
-				  <img src="clothsim.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				  <img src="images/part1/2.png" width="400px"/>
+				  <figcaption>(b) without any shearing constraints</figcaption>
 				</td>
 			  </tr>
 			  <tr>
 				<td style="text-align: center;">
-				  <img src="clothsim.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				  <img src="images/part1/3.png" width="400px"/>
+				  <figcaption>(c) with only shearing constraints</figcaption>
 				</td>
 				<td style="text-align: center;">
-				  <img src="clothsim.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				  <img src="images/part1/1.png" width="400px"/>
+				  <figcaption>(d) with all constraints</figcaption>
 				</td>
 			  </tr>
 			</table>
 		</div>
 
 		<h2>Part 2: Simulation via numerical integration</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+		<h4>Implmentation</h4>
+		All the point masses are subject to external forces.
+		In our case, we mostly consider gravity (and normal forces but we handle that separately).
+		So initially, for each point mass, we sum all the external forces to get a net force.
+
+		<br> <br>
+		In addition to external forces, we also need to consider all the forces for every spring
+		(otherwise, the cloth is just a cloud of point masses falling to the ground).
+		To do this, we use Hook's law on every spring \(F_s = k_s \Delta x = k_s || p_a - p_b || -l \)
+		where \( l \) is the length of the spring at rest.
+
+		<br><br>
+
+		Now that we've calculated the net force, how do we update the position of each point mass for that timestep?
+		For this, we use Verlet integration.
+		Basically, we assume acceleration is constant for that timestep and we use our kinematics equations.
+
+		\[ x_{t+dt} = x_t + v_t dt + a_t dt^2 \]
+
+		Notice that this follows the kinematics integral for constant acceleration.
+		Acceleration here is calculated every timestep.
+
+		We can now simplify:
+		\[ x_{t+dt} = x_t + (x_t - x_{t-dt}) + a_t dt^2 \]
+
+		And add a dampling factor which we add to slow the velocity.
+
+		\[ x_{t+dt} = x_t + (1 - d) (x_t - x_{t-dt}) + a_t dt^2 \]
+
+		Finally, we constrain the length of the springs by adding a small displacement vector to each point mass where the spring is overextended.
+
+
+		<h4>Varying Parameters</h4>
+
+		<h5>k_s</h5>
+		Varying the k constant varies the "stiffness" of the fabric.
+		Intuitively, it's like varying the fabric between an elastic cloth and a piece of paper.
+		As you can see below, the resting state are different, where the cloth is pulled more tightly together when ks is high, and vice versa.
+		When ks is low, we see more creases and larger creases.
+
+		<br><br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part2/1.png" width="400px"/>
+				  <figcaption>(a) ks = 1 N/m</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part2/2.png" width="400px"/>
+				  <figcaption>(b) ks = 50000 N/m</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h5>density</h5>
+		Varying density has the same underlying effect as varying ks but in the opposite direction.
+		So as density increase, the cloth has a more elastic "stretchy" texture.
+		There are more creases in the cloth.
+		As the density decreases, the cloth is more tense.
+		Here is the cloth mid-fall with different densities.
+
+		<br><br>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part2/3.png" width="400px"/>
+				  <figcaption>(a) density = 1 g/cm^2</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part2/4.png" width="400px"/>
+				  <figcaption>(b) density = 1000 g/cm^2</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h5>damping</h5>
+
+		Damping seems to change the "inertia" of the point masses.
+		When damping is low, we achieve a lot of extravagant movement, ripples throughout the mesh, and a swinging behavior.
+		It looks as if the cloth was made of a chain net.
+		On the otherhand, when damping is high, it results in little overall movement.
+		The points take a smooth path towards its final resting position.
+		This appears like the effect of a falling piece of paper when you hold the corners (lots of air friction).
+
+		<br><br>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part2/5.png" width="400px"/>
+				  <figcaption>(a) damping = 0.01</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part2/6.png" width="400px"/>
+				  <figcaption>(b) damping = 0.8 </figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
 
 		<h2>Part 3: Handling collisions with other objects</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		
+		<h4>Implementation of Sphere Collision</h4>
+		Handling collisions with spheres is mathematically pretty simple.
+		For every point mass, we calculate whether the point is inside the sphere:
+		\[ || p - c || < r \]
+		Where \( p \) is the point mass's point, \( c \) is the sphere's center
+
+		<br><br>
+		
+		If inside, we create a displacement vector from the last position towards the projected surface of the sphere.
+
+		\[ \text{Projection onto the surface of sphere} = r \cdot \frac{p - c}{|| p - c ||} \]
+
+		We can use this point as a displacement vector to adjust the position.
+		Essentially, we are bumping it towards the sphere's surface.
+
+
+		<h4>Implementation of Plane Collision</h4>
+		Handling collisions with a plane is also mathematically pretty simple.
+		For every point mass, we detect if it crosses the plane's boundary.
+		We can do this with the following condition:
+
+		\[ [(p_{t-dt} - p') \cdot N] \times [(p - p') \cdot N] < 0 \]
+
+		where N is the normal vector and \( p' \) is a point on the plane. 
+		I'm basically leveraging the property of dot products to see if the 
+		angle created with the normal is obtuse and then acute or vice versa.
+		This means sign the dot product flips, hence will be negative when multipied together.
+		
+		<br><br>
+
+		Once detected, we can find the intercept with the plane.
+		We do this by normalizing the direction it was already going and applying normal plane intercept we've learned in previous lecture.
+
+		\[
+		(p_{plane} - p') \cdot N = 0\\
+		(ro + t\cdot rd - p') \cdot N = 0\\
+		ro = p_{t-dt} \\
+		rd = \frac{p_t - p_{t-dt}}{|| p_t - p_{t-dt} ||} \\
+		t = \frac{ (p_t - p_{t-dt}) \cdot N}{ rd \cdot N }
+		\]
+		Solve for \( p_{plane} \) and then we can add a small offset in the normal direction to avoid problems in the future.
+
+		<h4>Varying ks</h4>
+		As we can see below, varying ks varies the stiffness of the fabric.
+		For low ks, we have flexible fabrics that bends and creases easily over the shape of the sphere.
+		For higher ks, we have stiff fabric that retains some of the original shape and sticks out, masking the shape of the underlying sphere.
+		(This is the rough effect of folding a piece of fabric a couple times over itself.)
+
+		<br><br>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part3/1.png" width="400px"/>
+				  <figcaption>(a) ks = 500</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part3/2.png" width="400px"/>
+				  <figcaption>(b) ks = 5000</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part3/3.png" width="400px"/>
+				  <figcaption>(c) ks = 50000</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part3/4.png" width="400px"/>
+				  <figcaption>(d) lying on plane w/ custom shader</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
 
 		<h2>Part 4: Handling self-collisions</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+		How to we handle self-collisions such that it won't fold into itself?
+		<figure>
+			<img src="images/part4/before.png" alt="Cloth draped over" style="width:30%"/>
+			<figcaption>Not handling self-collisions</figcaption>
+		</figure>
+
+		<h4>Implementation</h4>
+
+		Naively, we can calculate interactions between every possible pair of point masses.
+		This is obviously quite inefficient with \( O(n^2) \) time.
+
+		<br><br>
+		Our method requires us to create a hash for every point mass during every iteration.
+		So in \(O(n) \) time, we loop through all the point masses, assigning it to a hash based on its general area in 3d space.
+		So all the points within a certain 3D box in space (calculated by modulo) is assigned a hash and the points in a different box are assigned a different hash.
+		We can store this point into a hashmap. ```map< float, vector< PointMass * >>``` so we've grouped them by nearest points within a box.
+		<br><br>
+		Now that we've grouped them by nearest point masses, for every point mass, we can check if it 
+		is self-colliding with all the points within it's nearest 3D box (with the same hash).
+		Essentially, we check if the distances are too close and apply a displacement vector in the opposing direction
+		such that the thickness is right.
+
+		<br><br>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part4/1.png" width="400px"/>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part4/2.png" width="400px"/>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part4/3.png" width="400px"/>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part4/4.png" width="400px"/>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Varying ks and density</h4>
+
+		Varying ks and density have the similar effects but in opposite directions.
+		By increasing ks, we have a less bendy fabric that folds in on itself.
+		The effect is like bending a large piece of plastic or a stack of papers.
+		This is similar to having low density in the fabric!
+		<br><br>
+		Alternatively, with low ks (or a high density) we have a flimsy piece of cloth that bends over itself easily.
+		The effect is that it is like a thin piece of silk.
+		<br><br>
+		Below are some of the effects but at different time steps.
+		<br><br>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part4/5.png" width="400px"/>
+				  <figcaption>(a) ks = 500 N/m</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part4/6.png" width="400px"/>
+				  <figcaption>(b) ks = 50000 N/m</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part4/7.png" width="400px"/>
+				  <figcaption>(c) density = 1 g/cm^2</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part4/8.png" width="400px"/>
+				  <figcaption>(d) density = 80 g/cm^2</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
 
 		<h2>Part 5: Shaders</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
-		<h2>(Optional) Part 6: Extra Credit - Additional cloth simulation features!</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-		
-		<h2>Additional Notes (please remove)</h2>
-		<ul>
-			<li>You can also add code if you'd like as so: <code>code code code</code></li>
-			<li>If you'd like to add math equations, 
-				<ul>
-					<li>You can write inline equations like so: \( a^2 + b^2 = c^2 \)</li>
-					<li>You can write display equations like so: \[ a^2 + b^2 = c^2 \]</li>
-				</ul>
-			</li>
-		</ul>
+		<h4>Shader program</h4>
+		Shaders are programs we run in parallel on the GPU, which makes them very useful.
+		With the vertex shader, we often define a set of vertices in 3D space that we send in, effectively describing how we draw the triangular mesh in 3D space.
+		The program uses barycentric interpolation across the vertices we've specified.
+		With the fragment shader, we color in the mesh we've created by defining how we move across the surface in \( uv\) coordinates.
+		<br><br>
+
+		With this, we are essentially able to perform operations on the vertices in 3D space in parallel (on the GPU).
+		We are also able to perform operations on all the pixels in a parallel manner.
+		This allows a huge speed up instead of running linearly on the CPU, even with multithreading. 
+		This allows us to perform complicated calculations often in real-time.
+
+		<h4>Blinn-Phong Model</h4>
+		The Blinn-Phone Model is a way of shading that artificially captures the various types of lights in a room.
+		It captures the ambient light, diffuse lighting, and specular lighting of the object.
+		In layman's terms, there is scattered light in the room, more direct light on the object, and super direct light that creates a glossy/shiny effect.
+
+		In mathematical terms:
+
+		\[ L = k_a I_a + k_d (I/r^2) \max(0, n \cdot l) + k_s (I/r^2) \max(0, n \cdot h)^p \]
+
+		We can vary the parameters \( k_a, I_a, k_d, k_s, p \) to get a variation of how much of each property we would like.
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part4/5.png" width="400px"/>
+				  <figcaption>(a) ks = 500 N/m</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part4/6.png" width="400px"/>
+				  <figcaption>(b) ks = 50000 N/m</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part4/7.png" width="400px"/>
+				  <figcaption>(c) density = 1 g/cm^2</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part4/8.png" width="400px"/>
+				  <figcaption>(d) density = 80 g/cm^2</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Texture and Mirror Shader</h4>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part5/1.png" width="400px"/>
+				  <figcaption>(a) texture shader (neil armstrong)</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part5/2.png" width="400px"/>
+				  <figcaption>(b) mirror shader</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Bump Map and Displacement Map</h4>
+		For the following we set height to 0.02 and normal to 100. 
+		The bump map is our way of adding texture into our fabric.
+		The fabric also incorporates the texture's normals into our calculation of the radiance.
+		<br><br>
+		The displacement mapping goes one step further and moves the vertex in space according the texture.
+		Hence, there should be a subtle geometrical quality we can see.
+
+		<br><br>
+		To me, I don't see that much of a difference between mesh resolution of 16 and 128.
+		Perhaps there were other factors I missed.
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part5/6.png" width="400px"/>
+				  <figcaption>(a) bump mapping res=16</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part5/7.png" width="400px"/>
+				  <figcaption>(b) displacement mapping res=16</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/part5/8.png" width="400px"/>
+				  <figcaption>(a) bump mapping res=128</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/part5/9.png" width="400px"/>
+				  <figcaption>(b) displacement mapping res=128</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+
+		<h4>Custom Shader</h4>
+		For my custom shader, I thought it would be cool to remap the \( uv\) coordinates into something.
+		I centered them into \( [0, 1] \) to \( [-1, 1] \). Then I treated the \(vec2\) as an imaginary number
+		and tried various complex functions. I tried a couple such as
+		\( z \rightarrow z^2 \) or \( z \rightarrow e^z \).
+		The result in the following is \( f(z) = e^z \)
+
+		<br><br>
+		In addition, I also passed some the channels through \( f(x) = \max(0, x^2) \) in efforts to create "high contrast."
+		<br><br>
+
+		<figure>
+			<img src="images/part5/3.png" alt="" width="40%" />
+			<figcaption>remapping uv-space</figcaption>
+		</figure>
+
 		</div>
 	</body>
 </html>

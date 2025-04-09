@@ -492,6 +492,44 @@
 			<figcaption>remapping uv-space</figcaption>
 		</figure>
 
+		<h2>Extra Credit - Additional cloth simulation features!</h2>
+		<h3>Wind</h3>
+
+		We implemented a wind force on the cloth, where the wind direction is based in the X-Y plane, particularly being a <i>rotation</i> — creating a vortex of sorts. For the wind strength, I used a model where the wind strength is based on height from the ground, based on the principle of viscosity, where the layer of air in touch with the ground is not moving, and layers on bottom move slower than layers on top.
+
+		<br><br>
+		We can see the effect of wind on the cloth simulation below, while it falls and after its fallen.
+
+		<br><br>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/ec/falling_no_wind.png" width="400px"/>
+				  <figcaption>While falling; no wind</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/ec/falling_wind.png" width="400px"/>
+				  <figcaption>While falling; with wind</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/ec/fallen_no_wind.png" width="400px"/>
+				  <figcaption>After falling; no wind</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/ec/fallen_wind.png" width="400px"/>
+				  <figcaption>After falling; being dragged by wind</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<br><br>
+		
+		Thank you for reading :)
 		</div>
 	</body>
 </html>
